@@ -42,8 +42,8 @@ cat > "$HTTP_CONF" << HTTPEOF
     RewriteCond %{HTTPS} off
     RewriteRule ^(.*)$ https://%{HTTP_HOST}\\$1 [R=301,L]
     
-    ErrorLog \\${APACHE_LOG_DIR}/${config.appName}_error.log
-    CustomLog \\${APACHE_LOG_DIR}/${config.appName}_access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/${config.appName}_error.log
+    CustomLog \${APACHE_LOG_DIR}/${config.appName}_access.log combined
 </VirtualHost>
 HTTPEOF
 
@@ -117,8 +117,8 @@ cat > "$HTTPS_CONF" << HTTPSEOF
     </IfModule>
     
     # Logging
-    ErrorLog \\${APACHE_LOG_DIR}/${config.appName}_ssl_error.log
-    CustomLog \\${APACHE_LOG_DIR}/${config.appName}_ssl_access.log combined
+    ErrorLog \${APACHE_LOG_DIR}/${config.appName}_ssl_error.log
+    CustomLog \${APACHE_LOG_DIR}/${config.appName}_ssl_access.log combined
 </VirtualHost>
 HTTPSEOF
 
