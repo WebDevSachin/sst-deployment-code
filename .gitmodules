@@ -1,0 +1,3 @@
+[submodule "full-stack"]
+	path = full-stack
+	url = https://github.com/WebDevSachin/sst-full-stack.git

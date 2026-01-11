@@ -1,0 +1,19 @@
+{
+  "name": "saffron-deployment",
+  "version": "1.0.0",
+  "description": "SST-based Infrastructure as Code for Saffron Fullstack deployment",
+  "type": "module",
+  "scripts": {
+    "deploy": "sst deploy",
+    "dev": "sst dev"
+  },
+  "dependencies": {
+    "@pulumi/command": "^0.9.2",
+    "@pulumi/pulumi": "^3.0.0",
+    "sst": "^3.17.25"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
