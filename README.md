@@ -58,6 +58,218 @@ That's it! The deployment will:
 - Set up Apache reverse proxy with WebSocket support
 - Start your application
 
+## Deploying to Your Own Server
+
+Follow these steps to deploy your application to a fresh server:
+
+### Prerequisites
+
+1. **A Linux Server** (Ubuntu/Debian or CentOS/AlmaLinux/Rocky)
+   - Fresh VPS or existing server
+   - Root or sudo access
+   - Minimum 1GB RAM recommended
+
+2. **Your Application Repository**
+   - Git repository with your code
+   - Monorepo structure: `backend/` and `frontend/` folders
+   - GitHub Personal Access Token with repo access
+
+3. **Domain Name** (recommended)
+   - Domain pointed to your server's IP (A record)
+   - Wait for DNS propagation before deployment
+
+### Step-by-Step Deployment
+
+#### 1. Set Up SSH Access
+
+Generate an SSH key if you don't have one:
+
+```bash
+# On your local machine
+ssh-keygen -t ed25519 -C "your_email@example.com"
+# Save to: ~/.ssh/id_ed25519
+```
+
+Copy the SSH key to your server:
+
+```bash
+# Replace with your server IP
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@your-server-ip
+```
+
+Test SSH connection:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@your-server-ip
+```
+
+#### 2. Clone This Deployment Repository
+
+```bash
+git clone https://github.com/WebDevSachin/sst-deployment-code.git
+cd sst-deployment-code
+npm install
+```
+
+#### 3. Configure Environment Files
+
+Create your environment files from examples:
+
+```bash
+cp .env.example .env
+cp .env.backend.example .env.backend
+cp .env.frontend.example .env.frontend
+```
+
+**Edit `.env`:**
+
+```env
+# Your app name (used for PM2 processes, logs, configs)
+APP_NAME=myapp
+
+# Your server details
+SERVER_IP=your-server-ip-or-domain.com
+SSH_USER=root
+SSH_KEY_PATH=/Users/yourname/.ssh/id_ed25519
+
+# Your Git repository
+GIT_REPO_URL=https://github.com/yourusername/your-app-repo.git
+GIT_TOKEN=github_pat_xxxxxxxxxxxxxxxxxxxxx  # Get from GitHub settings
+GIT_BRANCH=main
+
+# Your domain
+DOMAIN=yourdomain.com
+
+# Node.js version
+NODE_VERSION=22
+
+# Deployment path (optional)
+DEPLOYMENT_PATH=/var/www/myapp
+```
+
+**Edit `.env.backend`:**
+
+```env
+# Database credentials (will be created automatically)
+DATABASE_URL="mysql://app_user:YOUR_STRONG_PASSWORD@localhost:3306/app_db"
+
+# JWT secrets (generate random strings)
+JWT_SECRET="YOUR_RANDOM_SECRET_32_CHARS_OR_MORE"
+JWT_REFRESH_SECRET="YOUR_DIFFERENT_RANDOM_SECRET"
+
+# URLs (use your actual domain)
+FRONTEND_URL="https://yourdomain.com"
+API_BASE_URL="https://yourdomain.com"
+
+# Email settings (if needed)
+EMAIL_USER="noreply@yourdomain.com"
+EMAIL_FROM="noreply@yourdomain.com"
+```
+
+**Edit `.env.frontend`:**
+
+```env
+# API endpoints (use your actual domain)
+NEXT_PUBLIC_API_URL=https://yourdomain.com/api
+NEXT_PUBLIC_WS_URL=wss://yourdomain.com
+NEXT_PUBLIC_ADMIN_URL=https://yourdomain.com
+
+# JWT secret (same as backend)
+JWT_SECRET=YOUR_RANDOM_SECRET_32_CHARS_OR_MORE
+```
+
+#### 4. Verify Configuration
+
+Check that all required variables are set:
+
+```bash
+# View your configuration (hides sensitive data)
+cat .env | grep -v TOKEN | grep -v SECRET
+```
+
+#### 5. Deploy!
+
+Run the deployment:
+
+```bash
+npx sst deploy
+```
+
+**What happens during deployment:**
+1. ✅ Detects OS (Ubuntu/CentOS)
+2. ✅ Installs Node.js, PM2, Apache, MySQL/MariaDB
+3. ✅ Configures firewall (opens ports 80, 443)
+4. ✅ Obtains SSL certificate (Let's Encrypt)
+5. ✅ Clones your Git repository
+6. ✅ Uploads environment variables
+7. ✅ Installs dependencies (npm install)
+8. ✅ Builds backend (Prisma, TypeScript)
+9. ✅ Builds frontend (Next.js)
+10. ✅ Starts PM2 processes
+11. ✅ Configures Apache reverse proxy
+12. ✅ Enables WebSocket support
+13. ✅ Sets proper permissions
+
+Deployment takes 3-5 minutes on first run.
+
+#### 6. Verify Deployment
+
+After deployment completes, test your application:
+
+```bash
+# Check SSL certificate
+curl -I https://yourdomain.com
+
+# Check API endpoint
+curl https://yourdomain.com/api/health
+
+# Check PM2 processes
+ssh root@your-server-ip "pm2 list"
+
+# Check Apache status
+ssh root@your-server-ip "systemctl status apache2"
+```
+
+Visit your domain in a browser: `https://yourdomain.com`
+
+### Updating Your Application
+
+To deploy updates after making changes:
+
+```bash
+# 1. Push changes to your Git repository
+git add .
+git commit -m "Your changes"
+git push origin main
+
+# 2. Run deployment again (it will pull latest code)
+npx sst deploy
+```
+
+The deployment script is **idempotent** - it safely updates existing installations.
+
+### Common Issues & Solutions
+
+**Issue: SSH connection fails**
+- Verify SSH key path in `.env`
+- Test SSH manually: `ssh -i ~/.ssh/id_ed25519 root@your-server-ip`
+- Check server firewall allows SSH (port 22)
+
+**Issue: SSL certificate fails**
+- Verify domain DNS points to server IP: `dig yourdomain.com`
+- Wait for DNS propagation (can take up to 48 hours)
+- Check server firewall allows ports 80 and 443
+
+**Issue: Database connection error**
+- Verify `DATABASE_URL` in `.env.backend`
+- Check MySQL/MariaDB is running: `systemctl status mysql`
+- Verify database and user were created
+
+**Issue: WebSocket not connecting**
+- Check Apache modules: `apache2ctl -M | grep proxy_wstunnel`
+- Verify `NEXT_PUBLIC_WS_URL` uses `wss://` (secure WebSocket)
+- Check Apache error logs: `tail -f /var/log/apache2/myapp_ssl_error.log`
+
 ## Supported Operating Systems
 
 ### CentOS Stream / AlmaLinux / Rocky Linux (dnf)
