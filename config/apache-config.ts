@@ -94,16 +94,19 @@ cat > "$HTTPS_CONF" << HTTPSEOF
     </IfModule>
     
     # WebSocket Support for Socket.IO (CRITICAL!)
-    # This enables real-time features (orders, cart, menu updates)
+    # Socket.IO requires WebSocket tunneling for real-time features
     RewriteEngine On
     
-    # Upgrade WebSocket connections
-    RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    RewriteRule ^/(.*)$ ws://127.0.0.1:8000/$1 [P,L]
-    
-    # Socket.IO specific paths
-    ProxyPass /socket.io/ http://127.0.0.1:8000/socket.io/
-    ProxyPassReverse /socket.io/ http://127.0.0.1:8000/socket.io/
+    # Enable WebSocket proxy for Socket.IO
+    <Location /socket.io/>
+        RewriteEngine On
+        RewriteCond %{HTTP:Upgrade} websocket [NC]
+        RewriteCond %{HTTP:Connection} upgrade [NC]
+        RewriteRule .* ws://127.0.0.1:8000%{REQUEST_URI} [P,L]
+        
+        ProxyPass ws://127.0.0.1:8000/socket.io/
+        ProxyPassReverse ws://127.0.0.1:8000/socket.io/
+    </Location>
     
     # Proxy all other requests to frontend on port 3000
     ProxyPass / http://127.0.0.1:3000/ nocanon
