@@ -106,10 +106,38 @@ if command -v dnf &> /dev/null; then
         echo 'LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so' >> /etc/httpd/conf.modules.d/00-proxy.conf
     fi
     
+    # Ensure all proxy modules are loaded
+    if ! grep -q "LoadModule proxy_module" /etc/httpd/conf.modules.d/00-proxy.conf 2>/dev/null; then
+        cat > /etc/httpd/conf.modules.d/00-proxy.conf << 'PROXYEOF'
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule proxy_wstunnel_module modules/mod_proxy_wstunnel.so
+LoadModule rewrite_module modules/mod_rewrite.so
+LoadModule headers_module modules/mod_headers.so
+PROXYEOF
+    fi
+    
     # Install Certbot
     echo "📦 Installing Certbot..."
     $PKG_MGR install -y epel-release
     $PKG_MGR install -y certbot python3-certbot-apache
+    
+    # Configure firewall for HTTP/HTTPS
+    echo "🔥 Configuring firewall..."
+    if command -v firewall-cmd &> /dev/null; then
+        firewall-cmd --permanent --add-service=http 2>/dev/null || true
+        firewall-cmd --permanent --add-service=https 2>/dev/null || true
+        firewall-cmd --reload 2>/dev/null || true
+        echo "✅ Firewall configured (firewalld)"
+    fi
+    
+    # Configure SELinux for proxy connections
+    echo "🔒 Configuring SELinux..."
+    if command -v setsebool &> /dev/null; then
+        setsebool -P httpd_can_network_connect 1 2>/dev/null || true
+        setsebool -P httpd_can_network_relay 1 2>/dev/null || true
+        echo "✅ SELinux configured for proxy"
+    fi
     
     # Start and enable services
     systemctl enable httpd
@@ -154,6 +182,23 @@ else
     exit 1
 fi
 
+# Install MySQL/MariaDB based on OS
+echo "📦 Installing database server..."
+if [ "$PKG_MGR" = "dnf" ]; then
+    # CentOS/RHEL - use MariaDB
+    $PKG_MGR install -y mariadb-server mariadb
+    systemctl enable mariadb
+    systemctl start mariadb || true
+    echo "✅ MariaDB installed (CentOS/RHEL)"
+else
+    # Ubuntu/Debian - use MySQL
+    export DEBIAN_FRONTEND=noninteractive
+    $PKG_MGR install -y mysql-server
+    systemctl enable mysql
+    systemctl start mysql || true
+    echo "✅ MySQL installed (Ubuntu/Debian)"
+fi
+
 # Install PM2 globally
 echo "📦 Installing PM2..."
 npm install -g pm2
@@ -167,6 +212,7 @@ node -v
 npm -v
 pm2 -v
 apache2 -v 2>/dev/null || httpd -v
+mysql --version 2>/dev/null || mariadb --version 2>/dev/null || echo "Database not installed"
 
 echo "✅ System setup complete!"
         `,
@@ -186,6 +232,15 @@ set -e
 
 echo "🔒 Setting up SSL certificate for ${config.domain}..."
 
+# Detect Apache service name
+if systemctl is-active --quiet httpd 2>/dev/null; then
+    APACHE_SERVICE="httpd"
+elif systemctl is-active --quiet apache2 2>/dev/null; then
+    APACHE_SERVICE="apache2"
+else
+    APACHE_SERVICE="httpd"
+fi
+
 # Check if certificate already exists
 if [ -f "/etc/letsencrypt/live/${config.domain}/fullchain.pem" ]; then
     echo "✅ SSL certificate already exists, skipping..."
@@ -193,20 +248,41 @@ if [ -f "/etc/letsencrypt/live/${config.domain}/fullchain.pem" ]; then
 else
     echo "📜 Obtaining SSL certificate..."
     
-    # Stop Apache temporarily for standalone mode (if needed)
-    if command -v systemctl &> /dev/null; then
-        if systemctl is-active --quiet httpd 2>/dev/null || systemctl is-active --quiet apache2 2>/dev/null; then
-            # Try Apache plugin first (preferred)
-            certbot --apache --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain} || \\
-            certbot certonly --standalone --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain}
-        else
-            certbot certonly --standalone --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain}
-        fi
+    # Ensure Apache is running (needed for certbot --apache)
+    systemctl start $APACHE_SERVICE 2>/dev/null || true
+    sleep 2
+    
+    # Try Apache plugin first (preferred method)
+    if certbot --apache --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain} 2>/dev/null; then
+        echo "✅ Certificate obtained using Apache plugin"
     else
-        certbot certonly --standalone --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain}
+        echo "⚠️ Apache plugin failed, trying standalone mode..."
+        # Stop Apache for standalone mode
+        systemctl stop $APACHE_SERVICE 2>/dev/null || true
+        
+        if certbot certonly --standalone --non-interactive --agree-tos --email admin@${config.domain} -d ${config.domain}; then
+            echo "✅ Certificate obtained using standalone mode"
+            # Restart Apache
+            systemctl start $APACHE_SERVICE 2>/dev/null || true
+        else
+            echo "❌ Failed to obtain SSL certificate"
+            echo "⚠️ You may need to:"
+            echo "   1. Check DNS is pointing to this server"
+            echo "   2. Ensure ports 80 and 443 are open"
+            echo "   3. Run manually: certbot --apache -d ${config.domain}"
+            # Start Apache anyway
+            systemctl start $APACHE_SERVICE 2>/dev/null || true
+            exit 1
+        fi
     fi
     
     echo "✅ SSL certificate obtained!"
+fi
+
+# Setup auto-renewal (create cron job if not exists)
+if ! crontab -l 2>/dev/null | grep -q "certbot renew"; then
+    (crontab -l 2>/dev/null; echo "0 0,12 * * * certbot renew --quiet --post-hook 'systemctl reload $APACHE_SERVICE'") | crontab -
+    echo "✅ Auto-renewal cron job created"
 fi
 
 # Test renewal
@@ -353,15 +429,18 @@ echo "🔨 Building frontend application..."
 
 cd "${config.deploymentPath}/frontend"
 
-# Clean old dependencies
-rm -rf node_modules .next
+# Clean old dependencies (more aggressively)
+echo "🧹 Cleaning old frontend build..."
+rm -rf node_modules .next .next.tmp
+npm cache clean --force 2>/dev/null || true
 
 # Install dependencies
 echo "📦 Installing frontend dependencies..."
-npm install
+npm install --legacy-peer-deps || npm install
 
 # Build Next.js application
 echo "🏗️ Building Next.js application..."
+export NODE_OPTIONS="--max-old-space-size=4096"
 npm run build
 
 echo "✅ Frontend build complete!"
@@ -507,7 +586,19 @@ cat > "$HTTPS_CONF" << HTTPSEOF
     SSLEngine on
     SSLCertificateFile /etc/letsencrypt/live/${config.domain}/fullchain.pem
     SSLCertificateKeyFile /etc/letsencrypt/live/${config.domain}/privkey.pem
-    Include /etc/letsencrypt/options-ssl-apache.conf
+    
+    # Include SSL options if file exists (created by certbot)
+    <IfFile "/etc/letsencrypt/options-ssl-apache.conf">
+        Include /etc/letsencrypt/options-ssl-apache.conf
+    </IfFile>
+    
+    # Fallback SSL configuration if options file doesn't exist
+    <IfFile "!/etc/letsencrypt/options-ssl-apache.conf">
+        SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+        SSLCipherSuite ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+        SSLHonorCipherOrder off
+        SSLSessionTickets off
+    </IfFile>
     
     # Security Headers
     <IfModule mod_headers.c>
@@ -638,8 +729,50 @@ pm2 list
 echo "🔍 Verifying Apache status..."
 systemctl status $APACHE_SERVICE --no-pager | head -5 || true
 
-echo "✅ Final setup complete!"
+# Verify SSL certificate
+echo "🔍 Verifying SSL certificate..."
+if [ -f "/etc/letsencrypt/live/${config.domain}/fullchain.pem" ]; then
+    openssl x509 -in /etc/letsencrypt/live/${config.domain}/fullchain.pem -noout -dates || true
+    echo "✅ SSL certificate is valid"
+else
+    echo "⚠️ SSL certificate not found"
+fi
+
+# Verify listening ports
+echo "🔍 Verifying listening ports..."
+netstat -tulpn 2>/dev/null | grep -E ':(80|443|3000|8000)' || ss -tulpn | grep -E ':(80|443|3000|8000)' || true
+
+# Test Apache configuration
+echo "🔍 Testing Apache configuration..."
+if [ "$APACHE_SERVICE" = "httpd" ]; then
+    httpd -t || echo "⚠️ Apache config test failed"
+else
+    apache2ctl configtest || echo "⚠️ Apache config test failed"
+fi
+
+# Display helpful information
+echo ""
+echo "======================================"
 echo "🎉 Deployment successful!"
+echo "======================================"
+echo ""
+echo "📊 Deployment Summary:"
+echo "  • Domain: ${config.domain}"
+echo "  • Frontend: Running on port 3000 (proxied from /)"
+echo "  • Backend: Running on port 8000 (proxied from /api)"
+echo "  • WebSocket: Enabled on /socket.io"
+echo "  • SSL: Enabled (HTTPS)"
+echo ""
+echo "🔗 Access your application:"
+echo "  • https://${config.domain}"
+echo ""
+echo "📝 Useful commands:"
+echo "  • Check PM2 status: pm2 list"
+echo "  • View logs: pm2 logs"
+echo "  • Restart services: pm2 restart all"
+echo "  • Apache logs: tail -f $APACHE_LOG_DIR/saffron_ssl_error.log"
+echo ""
+echo "✅ Final setup complete!"
         `,
       },
       {
