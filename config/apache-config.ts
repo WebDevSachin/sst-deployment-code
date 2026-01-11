@@ -10,6 +10,20 @@ set -e
 echo "🌐 Configuring Apache reverse proxy..."
 
 DOMAIN="${config.domain}"
+DEPLOY_PATH="${config.deploymentPath}"
+
+# Read port configuration
+if [ -f "$DEPLOY_PATH/.ports" ]; then
+    source "$DEPLOY_PATH/.ports"
+    echo "📋 Using dynamic ports:"
+    echo "   Backend:  $BACKEND_PORT"
+    echo "   Frontend: $FRONTEND_PORT"
+else
+    # Fallback to default ports
+    BACKEND_PORT=8000
+    FRONTEND_PORT=3000
+    echo "⚠️  Port config not found, using defaults: Backend=$BACKEND_PORT, Frontend=$FRONTEND_PORT"
+fi
 
 # Detect Apache configuration directory
 if [ -d "/etc/httpd/conf.d" ]; then
@@ -84,13 +98,13 @@ cat > "$HTTPS_CONF" << HTTPSEOF
         ProxyPreserveHost On
         ProxyRequests Off
         
-        # Proxy API requests to backend on port 8000
-        ProxyPass /api http://127.0.0.1:8000/api nocanon
-        ProxyPassReverse /api http://127.0.0.1:8000/api
+        # Proxy API requests to backend on dynamic port
+        ProxyPass /api http://127.0.0.1:\${BACKEND_PORT}/api nocanon
+        ProxyPassReverse /api http://127.0.0.1:\${BACKEND_PORT}/api
         
         # Proxy static assets from backend (uploaded files)
-        ProxyPass /assets/uploads http://127.0.0.1:8000/assets/uploads nocanon
-        ProxyPassReverse /assets/uploads http://127.0.0.1:8000/assets/uploads
+        ProxyPass /assets/uploads http://127.0.0.1:\${BACKEND_PORT}/assets/uploads nocanon
+        ProxyPassReverse /assets/uploads http://127.0.0.1:\${BACKEND_PORT}/assets/uploads
     </IfModule>
     
     # WebSocket Support for Socket.IO (CRITICAL!)
@@ -98,19 +112,19 @@ cat > "$HTTPS_CONF" << HTTPSEOF
     RewriteEngine On
     
     # Enable WebSocket proxy for Socket.IO
-    <Location /socket.io/>
-        RewriteEngine On
-        RewriteCond %{HTTP:Upgrade} websocket [NC]
-        RewriteCond %{HTTP:Connection} upgrade [NC]
-        RewriteRule .* ws://127.0.0.1:8000%{REQUEST_URI} [P,L]
-        
-        ProxyPass ws://127.0.0.1:8000/socket.io/
-        ProxyPassReverse ws://127.0.0.1:8000/socket.io/
-    </Location>
-    
-    # Proxy all other requests to frontend on port 3000
-    ProxyPass / http://127.0.0.1:3000/ nocanon
-    ProxyPassReverse / http://127.0.0.1:3000/
+      <Location /socket.io/>
+          RewriteEngine On
+          RewriteCond %{HTTP:Upgrade} websocket [NC]
+          RewriteCond %{HTTP:Connection} upgrade [NC]
+          RewriteRule .* ws://127.0.0.1:\${BACKEND_PORT}%{REQUEST_URI} [P,L]
+          
+          ProxyPass ws://127.0.0.1:\${BACKEND_PORT}/socket.io/
+          ProxyPassReverse ws://127.0.0.1:\${BACKEND_PORT}/socket.io/
+      </Location>
+      
+      # Proxy all other requests to frontend on dynamic port
+      ProxyPass / http://127.0.0.1:\${FRONTEND_PORT}/ nocanon
+      ProxyPassReverse / http://127.0.0.1:\${FRONTEND_PORT}/
     
     # Additional headers for proper proxying
     <IfModule mod_headers.c>
