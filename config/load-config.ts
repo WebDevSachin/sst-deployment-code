@@ -27,6 +27,27 @@ export async function loadConfig() {
 
   const env = loadEnvFile(".env");
 
+  // Get environment file paths (with defaults)
+  const backendEnvPath =
+    env.BACKEND_ENV_FILE || process.env.BACKEND_ENV_FILE || ".env.backend";
+  const frontendEnvPath =
+    env.FRONTEND_ENV_FILE || process.env.FRONTEND_ENV_FILE || ".env.frontend";
+
+  // Verify environment files exist
+  if (!fs.existsSync(backendEnvPath)) {
+    throw new Error(
+      `Backend environment file not found: ${backendEnvPath}\n` +
+        `Please create it or update BACKEND_ENV_FILE in .env`
+    );
+  }
+
+  if (!fs.existsSync(frontendEnvPath)) {
+    throw new Error(
+      `Frontend environment file not found: ${frontendEnvPath}\n` +
+        `Please create it or update FRONTEND_ENV_FILE in .env`
+    );
+  }
+
   const config: Config = {
     appName: env.APP_NAME || process.env.APP_NAME || "app",
     ip: env.SERVER_IP || process.env.SERVER_IP!,
@@ -43,8 +64,8 @@ export async function loadConfig() {
       env.DEPLOYMENT_PATH ||
       process.env.DEPLOYMENT_PATH ||
       `/var/www/${env.APP_NAME || "app"}`,
-    envBackend: fs.readFileSync(".env.backend", "utf-8"),
-    envFrontend: fs.readFileSync(".env.frontend", "utf-8"),
+    envBackend: fs.readFileSync(backendEnvPath, "utf-8"),
+    envFrontend: fs.readFileSync(frontendEnvPath, "utf-8"),
   };
 
   if (!config.ip || !config.key || !config.repo || !config.domain) {
@@ -52,6 +73,12 @@ export async function loadConfig() {
       "Missing required environment variables. Check your .env file."
     );
   }
+
+  // Log which environment files are being used
+  console.log(`📋 Using environment files:`);
+  console.log(`   Backend:  ${backendEnvPath}`);
+  console.log(`   Frontend: ${frontendEnvPath}`);
+  console.log("");
 
   return config;
 }

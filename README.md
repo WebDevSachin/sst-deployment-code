@@ -129,7 +129,24 @@ cp .env.backend.example .env.backend
 cp .env.frontend.example .env.frontend
 ```
 
-**Important:** `.env.backend` and `.env.frontend` are uploaded to the server **BEFORE** building, so build errors will show if variables are missing or incorrect.
+**Custom Environment File Paths:**
+
+You can specify custom paths for your environment files in `.env`:
+
+```env
+# Use custom environment files (optional)
+BACKEND_ENV_FILE=full-stack/backend/.env.production
+FRONTEND_ENV_FILE=full-stack/frontend/.env.production
+```
+
+This is useful if:
+- Your environment files are in your app repository
+- You have multiple environments (`.env.staging`, `.env.production`)
+- You want to manage environment files alongside your code
+
+**Default behavior:** If not specified, uses `.env.backend` and `.env.frontend` from the deployment repository root.
+
+**Important:** The specified files are uploaded to the server **BEFORE** building, so build errors will show if variables are missing or incorrect.
 
 **Edit `.env`:**
 
@@ -155,7 +172,23 @@ NODE_VERSION=22
 
 # Deployment path (optional)
 DEPLOYMENT_PATH=/var/www/myapp
+
+# Environment file paths (optional - see below for examples)
+# BACKEND_ENV_FILE=.env.backend
+# FRONTEND_ENV_FILE=.env.frontend
 ```
+
+**Optional: Custom Environment File Paths**
+
+If your `.env` files are in your app repository, specify their paths:
+
+```env
+# Example: Use env files from your app repository
+BACKEND_ENV_FILE=full-stack/backend/.env.production
+FRONTEND_ENV_FILE=full-stack/frontend/.env.production
+```
+
+If not specified, defaults to `.env.backend` and `.env.frontend` in the deployment repository root.
 
 **Edit `.env.backend`:**
 
