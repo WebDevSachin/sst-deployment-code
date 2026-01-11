@@ -50,7 +50,7 @@ GIT_TOKEN=github_pat_xxxxx
 GIT_BRANCH=main
 
 # Domain
-DOMAIN=saffron-staging.example.com
+DOMAIN=yourdomain.com
 
 # Node.js Version
 NODE_VERSION=22
