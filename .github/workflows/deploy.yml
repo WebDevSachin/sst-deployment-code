@@ -1,0 +1,169 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Allow manual trigger
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for better Git operations
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          APP_NAME: ${{ secrets.APP_NAME }}
+        run: |
+          ssh -i ~/.ssh/deploy_key $SSH_USER@$SERVER_IP << 'ENDSSH'
+          set -e
+          
+          echo "🚀 Starting deployment..."
+          echo "📦 Repository: ${{ github.repository }}"
+          echo "🌿 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Triggered by: ${{ github.actor }}"
+          echo ""
+          
+          # Navigate to deployment directory
+          cd ${DEPLOYMENT_PATH}
+          
+          # Pull latest code
+          echo "📥 Pulling latest code..."
+          git fetch origin
+          git reset --hard origin/${GIT_BRANCH}
+          git clean -fd
+          
+          # Backend Build
+          echo ""
+          echo "🔨 Building backend..."
+          cd ${DEPLOYMENT_PATH}/backend
+          
+          if [ ! -f ".env" ]; then
+            echo "❌ ERROR: backend/.env not found!"
+            exit 1
+          fi
+          
+          npm ci --production=false
+          
+          # Prisma operations (if schema exists)
+          if [ -f "prisma/schema.prisma" ]; then
+            echo "🔧 Running Prisma operations..."
+            npx prisma generate
+            npx prisma migrate deploy
+          fi
+          
+          npm run build
+          echo "✅ Backend build complete"
+          
+          # Frontend Build
+          echo ""
+          echo "🔨 Building frontend..."
+          cd ${DEPLOYMENT_PATH}/frontend
+          
+          if [ ! -f ".env.production" ]; then
+            echo "❌ ERROR: frontend/.env.production not found!"
+            exit 1
+          fi
+          
+          rm -rf node_modules .next
+          npm ci
+          npm run build
+          echo "✅ Frontend build complete"
+          
+          # Restart PM2 processes
+          echo ""
+          echo "♻️ Restarting PM2 processes..."
+          pm2 reload ${APP_NAME}-backend --update-env || pm2 start ${DEPLOYMENT_PATH}/ecosystem.config.js --only ${APP_NAME}-backend
+          pm2 reload ${APP_NAME}-frontend --update-env || pm2 start ${DEPLOYMENT_PATH}/ecosystem.config.js --only ${APP_NAME}-frontend
+          
+          # Save PM2 configuration
+          pm2 save
+          
+          echo ""
+          echo "✅ Deployment complete!"
+          echo ""
+          echo "📊 PM2 Status:"
+          pm2 list
+          ENDSSH
+
+      - name: Health Check
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          echo "🏥 Running health checks..."
+          sleep 5 # Wait for services to start
+          
+          # Check frontend
+          if curl -f -s -o /dev/null -w "%{http_code}" https://${DOMAIN}/ | grep -q "200"; then
+            echo "✅ Frontend is healthy"
+          else
+            echo "❌ Frontend health check failed"
+            exit 1
+          fi
+          
+          # Check backend API
+          if curl -f -s -o /dev/null -w "%{http_code}" https://${DOMAIN}/api/health | grep -q "200"; then
+            echo "✅ Backend API is healthy"
+          else
+            echo "❌ Backend API health check failed"
+            exit 1
+          fi
+          
+          echo ""
+          echo "🎉 All health checks passed!"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
+          echo "🧹 Cleaned up SSH keys"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs above for details."
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🎉 Deployment Successful!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📦 Repository: ${{ github.repository }}"
+          echo "🌿 Branch: ${{ github.ref_name }}"
+          echo "📝 Commit: ${{ github.sha }}"
+          echo "👤 Deployed by: ${{ github.actor }}"
+          echo "🕐 Time: $(date)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -805,6 +805,51 @@ The deployment will:
 - Restart PM2 processes
 - Reload Apache configuration
 
+## Automated Deployment with GitHub Actions
+
+For continuous deployment, set up GitHub Actions to automatically deploy on every push.
+
+### Quick Setup
+
+1. **Add GitHub Secrets** (in your repository settings):
+   - `SSH_PRIVATE_KEY` - Your SSH private key
+   - `SERVER_IP` - Your server IP/domain
+   - `SSH_USER` - SSH username (usually `root`)
+   - `DEPLOYMENT_PATH` - Deployment path (e.g., `/var/www/myapp`)
+   - `APP_NAME` - Your app name
+   - `DOMAIN` - Your domain for health checks
+
+2. **Copy the workflow file** to your app repository:
+```bash
+cp .github/workflows/deploy.yml /path/to/your-app/.github/workflows/
+```
+
+3. **Push to trigger deployment**:
+```bash
+git push origin main
+```
+
+### What GitHub Actions Does
+
+```
+Push to main → GitHub Actions → Server
+  ↓
+1. Pull latest code
+2. Build backend (Prisma + TypeScript)
+3. Build frontend (Next.js)
+4. Restart PM2 processes
+5. Health check (API + Frontend)
+6. ✅ Deployment complete (3-5 min)
+```
+
+**See detailed setup:** [.github/workflows/SETUP.md](.github/workflows/SETUP.md)
+
+### Monitoring Deployments
+
+- **GitHub Actions tab**: View deployment logs
+- **On server**: `pm2 logs` to see application logs
+- **Health checks**: Automatic after each deployment
+
 ## Multiple Applications on One Server
 
 You can deploy multiple applications by using different `APP_NAME` values:
