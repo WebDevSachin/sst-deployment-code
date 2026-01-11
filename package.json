@@ -1,7 +1,7 @@
 {
-  "name": "saffron-deployment",
+  "name": "app-deployment",
   "version": "1.0.0",
-  "description": "SST-based Infrastructure as Code for Saffron Fullstack deployment",
+  "description": "SST-based Infrastructure as Code for full-stack application deployment",
   "type": "module",
   "scripts": {
     "deploy": "sst deploy",

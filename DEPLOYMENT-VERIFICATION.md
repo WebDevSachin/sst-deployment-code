@@ -154,7 +154,7 @@
 - ✅ `GIT_BRANCH` - Branch to deploy (main)
 - ✅ `DOMAIN` - Domain name
 - ✅ `NODE_VERSION` - Node.js version (22)
-- ✅ `DEPLOYMENT_PATH` - Deploy path (/var/www/saffron)
+- ✅ `DEPLOYMENT_PATH` - Deploy path (/var/www/app)
 
 ### Backend (.env.backend)
 - ✅ `DATABASE_URL` - MySQL/MariaDB connection
@@ -171,7 +171,7 @@
 ## ✅ File Structure
 
 ```
-/var/www/saffron/
+/var/www/app/
 ├── backend/
 │   ├── .env                    # Backend environment
 │   ├── node_modules/          # Dependencies
@@ -256,7 +256,7 @@ ssh root@server-ip
 pm2 logs --lines 100
 
 # Rollback Git
-cd /var/www/saffron
+cd /var/www/app
 git log --oneline -10
 git reset --hard PREVIOUS_COMMIT_HASH
 
@@ -266,8 +266,8 @@ cd frontend && npm run build && cd ..
 pm2 restart all
 
 # Check Apache logs
-tail -f /var/log/httpd/saffron_ssl_error.log    # CentOS
-tail -f /var/log/apache2/saffron_ssl_error.log  # Ubuntu
+tail -f /var/log/httpd/app_ssl_error.log    # CentOS
+tail -f /var/log/apache2/app_ssl_error.log  # Ubuntu
 ```
 
 ## ✅ Support Documentation

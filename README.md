@@ -1,6 +1,6 @@
-# Saffron Fullstack - Automated Deployment with SST
+# Full-Stack Application - Automated Deployment with SST
 
-Infrastructure as Code solution for deploying the Saffron Fullstack application (Next.js frontend + Node.js backend) to a Linux server using SST and Pulumi Command provider.
+Infrastructure as Code solution for deploying a full-stack application (Next.js frontend + Node.js backend) to a Linux server using SST and Pulumi Command provider.
 
 ## Features
 
@@ -56,12 +56,12 @@ DOMAIN=yourdomain.com
 NODE_VERSION=22
 
 # Deployment Path
-DEPLOYMENT_PATH=/var/www/saffron
+DEPLOYMENT_PATH=/var/www/app
 ```
 
 #### `.env.backend` - Backend Environment Variables
 
-This file will be uploaded to `/var/www/saffron/backend/.env` on the server.
+This file will be uploaded to `/var/www/app/backend/.env` on the server.
 
 Include all your backend environment variables:
 - Database connection string
@@ -72,7 +72,7 @@ Include all your backend environment variables:
 
 #### `.env.frontend` - Frontend Environment Variables
 
-This file will be uploaded to `/var/www/saffron/frontend/.env.production` on the server.
+This file will be uploaded to `/var/www/app/frontend/.env.production` on the server.
 
 **Important**: Frontend environment variables that need to be accessible in the browser must have the `NEXT_PUBLIC_` prefix.
 
@@ -151,8 +151,8 @@ The deployment automatically configures Apache as a reverse proxy:
 
 Applications are managed with PM2:
 
-- **Backend**: `saffron-backend` running on port 8000
-- **Frontend**: `saffron-frontend` running on port 3000
+- **Backend**: `app-backend` running on port 8000
+- **Frontend**: `app-frontend` running on port 3000
 
 ### Useful PM2 Commands (on server)
 
@@ -162,12 +162,12 @@ pm2 list
 
 # View logs
 pm2 logs
-pm2 logs saffron-backend
-pm2 logs saffron-frontend
+pm2 logs app-backend
+pm2 logs app-frontend
 
 # Restart applications
 pm2 restart all
-pm2 restart saffron-backend
+pm2 restart app-backend
 
 # Monitor resources
 pm2 monit
@@ -208,8 +208,8 @@ Verify environment variables are set correctly:
 
 ```bash
 # On server
-cat /var/www/saffron/backend/.env
-cat /var/www/saffron/frontend/.env.production
+cat /var/www/app/backend/.env
+cat /var/www/app/frontend/.env.production
 ```
 
 ### WebSocket Not Working
@@ -285,4 +285,4 @@ For issues or questions:
 
 ## License
 
-This deployment solution is part of the Saffron Fullstack project.
+This deployment solution can be used for any full-stack Node.js application.

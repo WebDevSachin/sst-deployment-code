@@ -173,8 +173,8 @@ pm2 list
 ```
 
 Should show:
-- `saffron-backend` (online)
-- `saffron-frontend` (online)
+- `app-backend` (online)
+- `app-frontend` (online)
 
 ## Common CentOS Issues & Solutions
 
@@ -222,7 +222,7 @@ httpd -t
 tail -f /var/log/httpd/error_log
 
 # Fix config and restart
-vi /etc/httpd/conf.d/saffron-https.conf
+vi /etc/httpd/conf.d/app-https.conf
 systemctl restart httpd
 ```
 
@@ -280,7 +280,7 @@ LoadModule deflate_module modules/mod_deflate.so
 
 ### 2. Node.js Memory
 
-Edit `/var/www/saffron/ecosystem.config.js`:
+Edit `/var/www/app/ecosystem.config.js`:
 
 ```javascript
 max_memory_restart: '2G',  // Increase if you have more RAM
@@ -381,7 +381,7 @@ pm2 monit
 pm2 logs --lines 100
 
 # Apache logs
-tail -f /var/log/httpd/saffron_ssl_error.log
+tail -f /var/log/httpd/app_ssl_error.log
 
 # Database connections
 mysql -e "SHOW PROCESSLIST;"
@@ -408,7 +408,7 @@ ab -n 1000 -c 10 https://yourdomain.com/
 cat > /root/backup-db.sh << 'EOF'
 #!/bin/bash
 DATE=$(date +%Y%m%d_%H%M%S)
-mysqldump -u root saffron_db > /backups/db_$DATE.sql
+mysqldump -u root app_db > /backups/db_$DATE.sql
 find /backups -name "db_*.sql" -mtime +7 -delete
 EOF
 
@@ -423,10 +423,10 @@ crontab -e
 
 ```bash
 # Backup deployment
-tar -czf /backups/app_$(date +%Y%m%d).tar.gz /var/www/saffron
+tar -czf /backups/app_$(date +%Y%m%d).tar.gz /var/www/app
 
 # Exclude node_modules
-tar --exclude='node_modules' --exclude='.next' -czf /backups/app_$(date +%Y%m%d).tar.gz /var/www/saffron
+tar --exclude='node_modules' --exclude='.next' -czf /backups/app_$(date +%Y%m%d).tar.gz /var/www/app
 ```
 
 ## Conclusion
