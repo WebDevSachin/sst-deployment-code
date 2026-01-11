@@ -113,13 +113,23 @@ npm install
 
 #### 3. Configure Environment Files
 
-Create your environment files from examples:
+The deployment uses **three separate `.env` files**:
+
+| Local File | Copied To Server | Used For |
+|------------|------------------|----------|
+| `.env` | Not copied (deployment config only) | SSH connection, Git clone, deployment settings |
+| `.env.backend` | `→ backend/.env` | Backend build & runtime (database, JWT, APIs) |
+| `.env.frontend` | `→ frontend/.env.production` | Frontend build (NEXT_PUBLIC_* variables) |
+
+**Create your environment files:**
 
 ```bash
 cp .env.example .env
 cp .env.backend.example .env.backend
 cp .env.frontend.example .env.frontend
 ```
+
+**Important:** `.env.backend` and `.env.frontend` are uploaded to the server **BEFORE** building, so build errors will show if variables are missing or incorrect.
 
 **Edit `.env`:**
 
@@ -196,19 +206,47 @@ npx sst deploy
 ```
 
 **What happens during deployment:**
-1. ✅ Detects OS (Ubuntu/CentOS)
-2. ✅ Installs Node.js, PM2, Apache, MySQL/MariaDB
-3. ✅ Configures firewall (opens ports 80, 443)
-4. ✅ Obtains SSL certificate (Let's Encrypt)
-5. ✅ Clones your Git repository
-6. ✅ Uploads environment variables
-7. ✅ Installs dependencies (npm install)
-8. ✅ Builds backend (Prisma, TypeScript)
-9. ✅ Builds frontend (Next.js)
-10. ✅ Starts PM2 processes
-11. ✅ Configures Apache reverse proxy
-12. ✅ Enables WebSocket support
-13. ✅ Sets proper permissions
+
+```mermaid
+graph TD
+    A[npx sst deploy] --> B[1. SystemSetup]
+    B --> C[Detect OS]
+    C --> D[Install Node.js, PM2, Apache, MySQL]
+    D --> E[2. SSLSetup]
+    E --> F[Obtain SSL Certificate]
+    F --> G[3. GitDeploy]
+    G --> H[Clone/Pull Repository]
+    H --> I[4. EnvUpload]
+    I --> J[Upload .env.backend → backend/.env]
+    J --> K[Upload .env.frontend → frontend/.env.production]
+    K --> L[5. BackendBuild]
+    L --> M{Build Success?}
+    M -->|Yes| N[6. FrontendBuild]
+    M -->|No| O[Show Error & Exit]
+    N --> P{Build Success?}
+    P -->|Yes| Q[7. PM2Config]
+    P -->|No| R[Show Error & Exit]
+    Q --> S[8. ApacheConfig]
+    S --> T[9. FinalSetup]
+    T --> U[✅ Deployment Complete]
+```
+
+**Detailed Steps:**
+1. ✅ **SystemSetup** - Detects OS (Ubuntu/CentOS), installs Node.js, PM2, Apache, MySQL/MariaDB
+2. ✅ **SSLSetup** - Obtains SSL certificate (cPanel AutoSSL or Let's Encrypt)
+3. ✅ **GitDeploy** - Clones your Git repository to `/var/www/APP_NAME`
+4. ✅ **EnvUpload** - Copies `.env.backend` → `backend/.env` and `.env.frontend` → `frontend/.env.production`
+5. ✅ **BackendBuild** - Runs `npm install`, Prisma generate/migrate, TypeScript build
+6. ✅ **FrontendBuild** - Runs `npm install`, Next.js build with environment variables
+7. ✅ **PM2Config** - Starts backend (port 8000) and frontend (port 3000) processes
+8. ✅ **ApacheConfig** - Configures reverse proxy with WebSocket support
+9. ✅ **FinalSetup** - Sets permissions and verifies deployment
+
+**Error Handling:**
+- If any build step fails, the deployment stops immediately
+- Full error logs are displayed in the terminal
+- Build logs are saved to `/tmp/` on the server for debugging
+- Common errors (missing .env, TypeScript errors, etc.) show helpful troubleshooting tips
 
 Deployment takes 3-5 minutes on first run.
 
@@ -247,6 +285,99 @@ npx sst deploy
 ```
 
 The deployment script is **idempotent** - it safely updates existing installations.
+
+### Debugging Build Errors
+
+If your deployment fails during the build step, you'll see detailed error messages in the terminal. Here's how to debug:
+
+#### Backend Build Errors
+
+**Error Example:**
+```
+❌ ERROR: Backend build failed!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Build error details:
+src/server.ts:15:3 - error TS2322: Type 'string' is not assignable to type 'number'.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Debugging Steps:**
+1. **Fix the error locally first:**
+   ```bash
+   cd your-app-repo/backend
+   npm run build  # Test build locally
+   ```
+
+2. **Check environment variables:**
+   - Verify `.env.backend` has all required variables
+   - Check `DATABASE_URL` format is correct
+   - Ensure `JWT_SECRET` is set
+
+3. **View full build log on server:**
+   ```bash
+   ssh root@your-server-ip "cat /tmp/backend-build.log"
+   ```
+
+4. **Common issues:**
+   - Missing dependencies in `package.json`
+   - TypeScript errors in code
+   - Invalid Prisma schema
+   - Missing environment variables
+
+#### Frontend Build Errors
+
+**Error Example:**
+```
+❌ ERROR: Frontend build failed!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Error: Environment variable not found: NEXT_PUBLIC_API_URL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Debugging Steps:**
+1. **Verify environment variables:**
+   ```bash
+   # Check your local .env.frontend
+   cat .env.frontend | grep NEXT_PUBLIC
+   ```
+   All client-side variables MUST have `NEXT_PUBLIC_` prefix!
+
+2. **Test build locally:**
+   ```bash
+   cd your-app-repo/frontend
+   npm run build  # Test build locally
+   ```
+
+3. **Check URLs are valid:**
+   - `NEXT_PUBLIC_API_URL` should be `https://yourdomain.com/api`
+   - `NEXT_PUBLIC_WS_URL` should be `wss://yourdomain.com` (not `ws://`)
+
+4. **View full build log on server:**
+   ```bash
+   ssh root@your-server-ip "cat /tmp/frontend-build.log"
+   ```
+
+5. **Common issues:**
+   - Missing `NEXT_PUBLIC_` prefix on client variables
+   - Invalid API URLs
+   - TypeScript errors in components
+   - Missing dependencies
+
+#### After Fixing Errors
+
+Once you've fixed the errors:
+
+```bash
+# 1. Commit and push your fixes
+git add .
+git commit -m "Fix build errors"
+git push origin main
+
+# 2. Run deployment again
+npx sst deploy
+```
+
+The deployment will pull your latest code and retry the build.
 
 ### Common Issues & Solutions
 
