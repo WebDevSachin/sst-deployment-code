@@ -17,15 +17,15 @@ if [ -d "/etc/httpd/conf.d" ]; then
     APACHE_CONF_DIR="/etc/httpd/conf.d"
     APACHE_LOG_DIR="/var/log/httpd"
     APACHE_SERVICE="httpd"
-    HTTP_CONF="\\$APACHE_CONF_DIR/${httpConf}"
-    HTTPS_CONF="\\$APACHE_CONF_DIR/${httpsConf}"
+    HTTP_CONF="\${APACHE_CONF_DIR}/${httpConf}"
+    HTTPS_CONF="\${APACHE_CONF_DIR}/${httpsConf}"
 elif [ -d "/etc/apache2/sites-available" ]; then
     # Ubuntu/Debian
     APACHE_CONF_DIR="/etc/apache2/sites-available"
     APACHE_LOG_DIR="/var/log/apache2"
     APACHE_SERVICE="apache2"
-    HTTP_CONF="\\$APACHE_CONF_DIR/${httpConf}"
-    HTTPS_CONF="\\$APACHE_CONF_DIR/${httpsConf}"
+    HTTP_CONF="\${APACHE_CONF_DIR}/${httpConf}"
+    HTTPS_CONF="\${APACHE_CONF_DIR}/${httpsConf}"
 else
     echo "❌ Could not determine Apache configuration directory"
     exit 1
